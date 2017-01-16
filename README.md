@@ -5,7 +5,7 @@ Description
 -----------------------------------------------------------------------------------
 Spherical world sample for Urho3D.
 
-Known Issue: vertical jump impulse is not computed correctly when the unit vector components x and   
+Known Issue: Bullet does not compute the vertical jump impulse correctly when the unit vector components x and   
 y ~= abs(0.707) or when z and y ~= abs(0.707). This note can be seen in Character.cpp, line 148.
 
 
