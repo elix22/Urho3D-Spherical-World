@@ -117,14 +117,6 @@ void Character::FixedUpdate(float timeStep)
     Vector3 gravityToWorld = dirToCenterWorld_ * FIXED_GRAVITY;
     body->SetGravityOverride(gravityToWorld);
 
-    // if surface changed
-    if (prevDirToCenterWorld_.DotProduct(dirToCenterWorld_) < 0.95f)
-    {
-        Vector3 rgt = prevDirToCenterWorld_.CrossProduct(dirToCenterWorld_);
-        Vector3 fwd = rgt.CrossProduct(dirToCenterWorld_);
-        //body->ApplyImpulse(fwd);
-    }
-
     // Normalize move vector so that diagonal strafing is not faster
     if (moveDir.LengthSquared() > 0.0f)
     {
