@@ -51,7 +51,8 @@ Character::Character(Context* context) :
     okToJump_(true),
     inAirTimer_(0.0f),
     jumpStarted_(false),
-    prevYaw_(0.0f)
+    prevYaw_(0.0f),
+    curDistToWorld_(1.0f)
 {
     // Only the physics update event is needed: unsubscribe from the rest for optimization
     SetUpdateEventMask(USE_FIXEDUPDATE | USE_FIXEDPOSTUPDATE);
@@ -73,7 +74,12 @@ void Character::RegisterObject(Context* context)
 void Character::Start()
 {
     // get the world sphere node
-    worldSphereNode_ = GetScene()->GetChild("SphereWorld");
+    if (worldNode_ == NULL)
+    {
+        worldNode_ = GetScene()->GetChild("WorldNode");
+    }
+
+    RaycastToWorld();
 
     // Component has been inserted into its scene node. Subscribe to events now
     SubscribeToEvent(GetNode(), E_NODECOLLISION, URHO3D_HANDLER(Character, HandleNodeCollision));
@@ -94,7 +100,7 @@ void Character::FixedUpdate(float timeStep)
     bool softGrounded = inAirTimer_ < INAIR_THRESHOLD_TIME;
 
     // Update movement & animation
-    const Quaternion& rot = body->GetRotation();
+    const Quaternion& rot = body->GetRotation();//node_->GetWorldRotation();
     Vector3 moveDir = Vector3::ZERO;
 
     if (controls_.IsDown(CTRL_FORWARD))
@@ -107,28 +113,28 @@ void Character::FixedUpdate(float timeStep)
         moveDir += rot * Vector3::RIGHT;
 
     // apply gravity
-    dirToCenterWorld_ = (worldSphereNode_->GetWorldPosition() - body->GetPosition()).Normalized();
+    RaycastToWorld();
     Vector3 gravityToWorld = dirToCenterWorld_ * FIXED_GRAVITY;
     body->SetGravityOverride(gravityToWorld);
+
+    // if surface changed
+    if (prevDirToCenterWorld_.DotProduct(dirToCenterWorld_) < 0.95f)
+    {
+        Vector3 rgt = prevDirToCenterWorld_.CrossProduct(dirToCenterWorld_);
+        Vector3 fwd = rgt.CrossProduct(dirToCenterWorld_);
+        //body->ApplyImpulse(fwd);
+    }
 
     // Normalize move vector so that diagonal strafing is not faster
     if (moveDir.LengthSquared() > 0.0f)
     {
         moveDir.Normalize();
-        curMoveDir_ = moveDir;
-
-        // add centripetal direction
-        Vector3 centripetalForce = curMoveDir_;
-        if (softGrounded)
-        {
-            centripetalForce += dirToCenterWorld_ * 0.2f;
-            centripetalForce.Normalize();
-        }
-        centripetalForce = centripetalForce * (softGrounded ? MOVE_FORCE : INAIR_MOVE_FORCE);
-        body->ApplyImpulse(centripetalForce);
     }
+
     // If in air, allow control, but slower than when on ground
     curMoveDir_ = moveDir;
+    // add centripetal direction
+    body->ApplyImpulse(curMoveDir_ * (softGrounded ? MOVE_FORCE : INAIR_MOVE_FORCE));
 
     if (softGrounded)
     {
@@ -153,6 +159,7 @@ void Character::FixedUpdate(float timeStep)
             {
                 okToJump_ = false;
                 jumpStarted_ = true;
+
                 body->ApplyImpulse(-dirToCenterWorld_ * JUMP_FORCE);
 
                 animCtrl->StopLayer(0);
@@ -177,11 +184,7 @@ void Character::FixedUpdate(float timeStep)
         }
         else
         {
-            const float rayDistance = 50.0f;
-            PhysicsRaycastResult result;
-            GetScene()->GetComponent<PhysicsWorld>()->RaycastSingle(result, Ray(node_->GetPosition(), dirToCenterWorld_), rayDistance, 0xff);
-            
-            if (result.body_ && result.distance_ > MAX_STEPDOWN_HEIGHT )
+            if (curDistToWorld_ > MAX_STEPDOWN_HEIGHT )
             {
                 animCtrl->PlayExclusive("Platforms/Models/BetaLowpoly/Beta_JumpLoop1.ani", 0, true, 0.2f);
             }
@@ -207,6 +210,26 @@ void Character::FixedUpdate(float timeStep)
     onGround_ = false;
 }
 
+void Character::RaycastToWorld()
+{
+    RigidBody* body = GetComponent<RigidBody>();
+    Vector3 bodyUpPos = body->GetPosition();
+    Vector3 castRayVec = worldNode_->GetWorldPosition() - bodyUpPos;
+    Vector3 castRayN = castRayVec.Normalized();
+
+    curDistToWorld_ = castRayVec.Length();
+    prevDirToCenterWorld_ = dirToCenterWorld_;
+
+    PhysicsRaycastResult result;
+    GetScene()->GetComponent<PhysicsWorld>()->RaycastSingle(result, Ray(bodyUpPos, castRayN), curDistToWorld_, ColMask_WorldRayCast);
+
+    if (result.body_)
+    {
+        dirToCenterWorld_ = result.normal_ * -1.0f;
+        curDistToWorld_ = result.distance_;
+    }
+}
+
 void Character::FixedPostUpdate(float timeStep)
 {
     UpdateOrientation();
@@ -217,14 +240,23 @@ void Character::UpdateOrientation()
     Vector3 upVecCenterWorld = dirToCenterWorld_ * -1.0f;
     Vector3 newRgt = upVecCenterWorld.CrossProduct( node_->GetWorldDirection() ).Normalized();
     Vector3 newFwd = newRgt.CrossProduct(upVecCenterWorld).Normalized();
-    Quaternion bodyRot(newRgt, upVecCenterWorld, newFwd);
 
-    if (!Equals(prevYaw_, controls_.yaw_))
+    // retain the same fwd direction before the surface changed
+    if (prevDirToCenterWorld_.DotProduct(dirToCenterWorld_) < 0.95f)
+    {
+        Vector3 prevUp = prevDirToCenterWorld_ * -1.0f;
+        newRgt = prevUp.CrossProduct(upVecCenterWorld).Normalized();
+        newFwd = newRgt.CrossProduct(upVecCenterWorld).Normalized();
+    }
+
+    Quaternion bodyRot(newRgt, upVecCenterWorld, newFwd);
+    if (!Equals(prevYaw_, controls_.yaw_) )
     {
         float dyaw = controls_.yaw_ - prevYaw_;
         prevYaw_ = controls_.yaw_;
         bodyRot = bodyRot * Quaternion(dyaw, Vector3::UP);
     }
+
     node_->SetWorldRotation(bodyRot);
 }
 
@@ -247,6 +279,7 @@ void Character::HandleNodeCollision(StringHash eventType, VariantMap& eventData)
         /*float contactImpulse = */contacts.ReadFloat();
 
         // If contact is below node center and pointing up, assume it's a ground contact
+        //if (contactPosition.y_ < (node_->GetPosition() - dirToCenterWorld_))
         //if (contactPosition.y_ < (node_->GetPosition().y_ + 1.0f))
         {
             //float level = contactNormal.y_;

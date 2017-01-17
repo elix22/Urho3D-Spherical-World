@@ -44,6 +44,24 @@ const float JUMP_FORCE = 7.0f;
 const float YAW_SENSITIVITY = 0.01f;
 const float INAIR_THRESHOLD_TIME = 0.1f;
 
+//** collision layers and masks**
+enum ColLayerType
+{
+    ColLayer_None       = (0),
+    ColLayer_Static     = (1<<0),
+    ColLayer_Character  = (1<<1),
+    ColLayer_World      = (1<<2),
+};
+
+enum ColMaskType
+{
+    ColMask_All          = ~(ColLayer_None),
+    ColMask_Static       = ColMask_All,
+    ColMask_Character    = ColMask_All,
+    ColMask_World        = ColMask_All,
+    ColMask_WorldRayCast = ~(ColLayer_Static | ColLayer_Character),
+};
+
 //=============================================================================
 //=============================================================================
 /// Character component, responsible for physical movement according to controls, as well as animation.
@@ -68,6 +86,7 @@ public:
     Controls controls_;
 
 protected:
+    void RaycastToWorld();
     /// Handle physics collision event.
     void HandleNodeCollision(StringHash eventType, VariantMap& eventData);
     void UpdateOrientation();
@@ -86,7 +105,9 @@ protected:
     bool jumpStarted_;
 
     // world sphere node
-    WeakPtr<Node>  worldSphereNode_;
+    WeakPtr<Node>  worldNode_;
     Vector3        dirToCenterWorld_;
+    Vector3        prevDirToCenterWorld_;
+    float          curDistToWorld_;
     float          prevYaw_;
 };
