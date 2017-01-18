@@ -236,12 +236,13 @@ void Character::UpdateOrientation()
     // retain the same fwd direction before the surface changed
     if (prevDirToCenterWorld_.DotProduct(dirToCenterWorld_) < 0.95f)
     {
-        Vector3 prevUp = prevDirToCenterWorld_ * -1.0f;
-        newRgt = prevUp.CrossProduct(upVecCenterWorld).Normalized();
-        newFwd = newRgt.CrossProduct(upVecCenterWorld).Normalized();
+        Quaternion dRot(prevDirToCenterWorld_, dirToCenterWorld_);
+        newFwd = dRot * node_->GetWorldDirection();
+        newRgt = dRot * node_->GetWorldRight();
     }
 
     Quaternion bodyRot(newRgt, upVecCenterWorld, newFwd);
+
     if (!Equals(prevYaw_, controls_.yaw_) )
     {
         float dyaw = controls_.yaw_ - prevYaw_;
