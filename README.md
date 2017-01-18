@@ -1,16 +1,16 @@
-# Urho3D Spherical and Square Worlds
+# Urho3D Spherical and Cubic World Physics
 -----------------------------------------------------------------------------------
 
 Description
 -----------------------------------------------------------------------------------
-Demonstrating spherical world and square world physics samples for Urho3D.
+Demonstrating spherical and cubic world physics samples for Urho3D.
 
 
 Screenshots
 -----------------------------------------------------------------------------------
 ![alt tag](https://github.com/Lumak/Urho3D-Spherical-World/blob/master/screenshot/sphericalworld.jpg)
 
-![alt tag](https://github.com/Lumak/Urho3D-Spherical-World/blob/master/screenshot/squareworld.jpg)
+![alt tag](https://github.com/Lumak/Urho3D-Spherical-World/blob/master/screenshot/cubicworld.jpg)
 
 To Build
 -----------------------------------------------------------------------------------
